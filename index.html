@@ -70,6 +70,7 @@
     .metric span { color: var(--muted); font-size: 12px; }
     .toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) 170px 140px auto auto; gap: 10px; align-items: center; margin: 18px 0; border: 1px solid var(--line); border-radius: 18px; background: rgba(21,23,19,.66); padding: 12px; }
     .statusbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+    .status-actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
     .news-list { display: grid; gap: 10px; }
     .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(25,25,21,.82); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
     .card:hover, .card.selected { border-color: rgba(110,231,183,.35); background: rgba(32,33,25,.92); }
@@ -92,6 +93,8 @@
     .chips { display: flex; flex-wrap: wrap; gap: 7px; }
     .chip, .mini-btn { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 6px 9px; font-size: 12px; }
     .chip.excluded { border-color: rgba(251,113,133,.45); color: #fecdd3; background: rgba(251,113,133,.08); text-decoration: line-through; }
+    .hot-keyword { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text); padding: 8px 9px; text-align: left; }
+    .hot-keyword:hover { border-color: rgba(110,231,183,.45); background: rgba(110,231,183,.06); }
     .threshold-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
     input[type="range"] { accent-color: var(--green); padding: 0; }
     .analysis-title { font-size: 21px; line-height: 1.2; letter-spacing: -.03em; }
@@ -189,6 +192,12 @@
       </div>
 
       <div class="panel">
+        <h3>Termini caldi</h3>
+        <p class="small" style="margin:0 0 9px;">Keyword più frequenti nelle notizie visibili, calcolate da titoli e summary reali.</p>
+        <div id="hotKeywords" class="nav"></div>
+      </div>
+
+      <div class="panel">
         <h3>Soglia virale</h3>
         <div class="threshold-row">
           <input id="thresholdInput" type="range" min="0" max="100" value="0" aria-label="Soglia virale">
@@ -243,7 +252,13 @@
 
       <div class="statusbar">
         <span id="resultLabel">—</span>
-        <span class="small">Fonte dati: Supabase / articles + clusters + viral_scores</span>
+        <div class="status-actions">
+          <span class="small">Export visibili:</span>
+          <button class="mini-btn" type="button" data-export="txt">TXT</button>
+          <button class="mini-btn" type="button" data-export="md">MD</button>
+          <button class="mini-btn" type="button" data-export="copy">Copia</button>
+          <button class="mini-btn" type="button" data-export="print">PDF/Stampa</button>
+        </div>
       </div>
 
       <div id="newsList" class="news-list"></div>
@@ -271,6 +286,13 @@
     });
 
     const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
+    const STOPWORDS_IT = new Set([
+      'alla','allo','alle','agli','dalla','dallo','dalle','dagli','nella','nello','nelle','negli','sulla','sullo','sulle','sugli',
+      'con','per','tra','fra','del','dello','della','dei','degli','delle','nel','nei','che','chi','cui','come','dove','quando',
+      'sono','era','dopo','prima','oggi','ieri','domani','notizie','news','video','foto','diretta','ultime','nuovo','nuova',
+      'ancora','anche','piu','più','meno','tutti','tutte','tutto','suo','sua','suoi','sue','gli','gli','una','uno','due',
+      'tre','dal','non','ma','ha','al','il','lo','la','i','le','un','di','a','da','in','su','e','o'
+    ]);
 
     const state = {
       session: null,
@@ -291,7 +313,7 @@
       searchInput: $('searchInput'), sortSelect: $('sortSelect'), limitSelect: $('limitSelect'), favOnlyBtn: $('favOnlyBtn'), reloadBtn: $('reloadBtn'),
       newsList: $('newsList'), emptyState: $('emptyState'), resultLabel: $('resultLabel'), totalCount: $('totalCount'), visibleCount: $('visibleCount'), breakingCount: $('breakingCount'),
       favCount: $('favCount'), realtimeStatus: $('realtimeStatus'), updatedAt: $('updatedAt'), toast: $('toast'),
-      categoryNav: $('categoryNav'), excludeChips: $('excludeChips'), thresholdInput: $('thresholdInput'), thresholdLabel: $('thresholdLabel'),
+      categoryNav: $('categoryNav'), excludeChips: $('excludeChips'), hotKeywords: $('hotKeywords'), thresholdInput: $('thresholdInput'), thresholdLabel: $('thresholdLabel'),
       analysisPanel: $('analysisPanel'), exportTxt: $('exportTxt'), exportMd: $('exportMd'), copyExport: $('copyExport'), printExport: $('printExport'),
       exportMessage: $('exportMessage'), printArea: $('printArea')
     };
@@ -494,6 +516,39 @@
       `).join('');
     }
 
+    function hotKeywordsFrom(articles, limit = 12) {
+      const counts = new Map();
+      for (const article of articles) {
+        const text = `${article.title || ''} ${article.summary || ''}`
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, ' ')
+          .replace(/[^a-z0-9àèéìòùç]+/gi, ' ');
+        for (const raw of text.split(/\s+/)) {
+          const word = raw.trim();
+          if (word.length < 4 || STOPWORDS_IT.has(word) || /^\d+$/.test(word)) continue;
+          counts.set(word, (counts.get(word) || 0) + 1);
+        }
+      }
+      return [...counts.entries()]
+        .filter(([, count]) => count > 1)
+        .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'it'))
+        .slice(0, limit);
+    }
+
+    function renderHotKeywords(visibleArticles) {
+      const keywords = hotKeywordsFrom(visibleArticles);
+      if (!keywords.length) {
+        els.hotKeywords.innerHTML = '<p class="small" style="margin:0;">Nessun termine ricorrente con i filtri attivi.</p>';
+        return;
+      }
+      els.hotKeywords.innerHTML = keywords.map(([word, count]) => `
+        <button type="button" class="hot-keyword" data-keyword="${escapeHtml(word)}">
+          <span>${escapeHtml(word)}</span><span class="count">${count}</span>
+        </button>
+      `).join('');
+    }
+
     function getFilteredArticles() {
       const q = els.searchInput.value.trim().toLowerCase();
       const sort = els.sortSelect.value;
@@ -565,6 +620,7 @@
           </article>
         `;
       }).join('');
+      renderHotKeywords(items);
       renderAnalysis(items.find(a => a.id === state.selectedId) || null);
     }
 
@@ -763,6 +819,12 @@
       state.excluded.has(name) ? state.excluded.delete(name) : state.excluded.add(name);
       render();
     });
+    els.hotKeywords.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-keyword]');
+      if (!button) return;
+      els.searchInput.value = button.dataset.keyword;
+      render();
+    });
     els.newsList.addEventListener('click', (event) => {
       const button = event.target.closest('[data-action]');
       if (!button) return;
@@ -776,6 +838,15 @@
     els.exportMd.addEventListener('click', () => downloadExport('md'));
     els.copyExport.addEventListener('click', copyExport);
     els.printExport.addEventListener('click', printExport);
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-export]');
+      if (!button) return;
+      const action = button.dataset.export;
+      if (action === 'txt') downloadExport('txt');
+      if (action === 'md') downloadExport('md');
+      if (action === 'copy') copyExport();
+      if (action === 'print') printExport();
+    });
 
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       state.session = session;
