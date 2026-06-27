@@ -1,0 +1,2 @@
+supabase>=2.6,<3
+feedparser>=6.0.11
