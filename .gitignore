@@ -1,0 +1,14 @@
+__pycache__/
+   *.pyc
+   *.bak*
+   *.tmp
+   .env
+   .env.*
+   *.db
+   _backups/
+   outputs/
+   app-locale/
+   sorgente-originale/
+   work/
+   .agents/
+   .codex/
