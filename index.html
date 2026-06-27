@@ -1,0 +1,509 @@
+﻿<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NewsHub AI — Radar virale</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #10110f;
+      --panel: #151713;
+      --panel-2: #191915;
+      --panel-3: #202119;
+      --line: rgba(255,255,255,.10);
+      --line-strong: rgba(255,255,255,.18);
+      --text: #f4f4f0;
+      --muted: #a5a79e;
+      --soft: #74776e;
+      --green: #6ee7b7;
+      --cyan: #67e8f9;
+      --amber: #fde68a;
+      --rose: #fda4af;
+      --red: #fb7185;
+      --radius: 14px;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-width: 320px; background: radial-gradient(circle at top left, rgba(110,231,183,.08), transparent 35%), var(--bg); color: var(--text); font-family: Arial, Helvetica, sans-serif; }
+    body { min-height: 100vh; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+    .hidden { display: none !important; }
+
+    .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 28px; }
+    .login-card { width: min(440px, 100%); border: 1px solid var(--line); border-radius: 22px; background: rgba(21,23,19,.88); box-shadow: 0 30px 90px rgba(0,0,0,.35); padding: 26px; }
+    .eyebrow { margin: 0 0 4px; color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 8px; font-size: clamp(28px, 5vw, 44px); letter-spacing: -.04em; }
+    h2 { margin-bottom: 0; font-size: clamp(24px, 3vw, 34px); letter-spacing: -.035em; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; color: var(--muted); }
+    .field { display: grid; gap: 7px; margin-top: 14px; }
+    .field label { color: var(--muted); font-size: 13px; }
+    input, select { width: 100%; border: 1px solid var(--line-strong); border-radius: 12px; background: #0c0d0b; color: var(--text); padding: 11px 12px; outline: none; }
+    input:focus, select:focus { border-color: rgba(110,231,183,.65); box-shadow: 0 0 0 3px rgba(110,231,183,.10); }
+    .btn { border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel-3); color: var(--text); padding: 10px 14px; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(110,231,183,.55); }
+    .btn-primary { border-color: rgba(110,231,183,.55); background: linear-gradient(135deg, rgba(110,231,183,.23), rgba(103,232,249,.12)); color: #ecfdf5; font-weight: 800; }
+    .btn-danger { border-color: rgba(251,113,133,.4); color: #ffe4e6; }
+    .btn-ghost { background: transparent; }
+    .btn-star { min-width: 42px; padding: 9px 11px; color: var(--amber); }
+    .btn-star.off { color: var(--muted); }
+    .error { margin-top: 12px; border: 1px solid rgba(251,113,133,.35); border-radius: 12px; background: rgba(251,113,133,.09); color: #fecdd3; padding: 10px 12px; }
+
+    .app { min-height: 100vh; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
+    .sidebar { border-right: 1px solid var(--line); background: rgba(21,23,19,.82); padding: 18px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+    .main { min-width: 0; padding: 18px 22px 32px; }
+    .brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .logo { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: rgba(110,231,183,.12); border: 1px solid rgba(110,231,183,.35); }
+    .pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; border: 1px solid rgba(110,231,183,.38); border-radius: 999px; background: rgba(110,231,183,.09); color: #d1fae5; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+    .pill.red { border-color: rgba(251,113,133,.45); background: rgba(251,113,133,.10); color: #ffe4e6; }
+    .pill.amber { border-color: rgba(253,230,138,.45); background: rgba(253,230,138,.10); color: #fef3c7; }
+    .metric-grid { display: grid; gap: 10px; margin: 18px 0; }
+    .metric { border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.025); padding: 12px; }
+    .metric b { display: block; font-size: 24px; letter-spacing: -.04em; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) 170px 140px auto auto; gap: 10px; align-items: center; margin: 18px 0; border: 1px solid var(--line); border-radius: 18px; background: rgba(21,23,19,.66); padding: 12px; }
+    .statusbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+    .news-list { display: grid; gap: 10px; }
+    .card { border: 1px solid var(--line); border-radius: 18px; background: rgba(25,25,21,.82); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+    .card:hover { border-color: rgba(110,231,183,.35); background: rgba(32,33,25,.92); transform: translateY(-1px); }
+    .card-title { margin: 7px 0 8px; font-size: 18px; line-height: 1.24; letter-spacing: -.02em; }
+    .meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; color: var(--muted); font-size: 12px; }
+    .summary { margin: 8px 0 0; color: #c9cabe; line-height: 1.45; font-size: 14px; }
+    .score { width: 74px; height: 74px; border: 1px solid rgba(110,231,183,.35); border-radius: 20px; display: grid; place-items: center; background: radial-gradient(circle at top, rgba(110,231,183,.18), rgba(110,231,183,.04)); text-align: center; }
+    .score b { display: block; font-size: 24px; letter-spacing: -.06em; }
+    .score span { display: block; color: var(--muted); font-size: 11px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .empty { border: 1px dashed var(--line-strong); border-radius: 18px; padding: 28px; color: var(--muted); text-align: center; }
+    .toast { position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(110,231,183,.4); border-radius: 16px; background: rgba(16,17,15,.95); color: var(--text); padding: 12px 14px; box-shadow: 0 20px 60px rgba(0,0,0,.4); max-width: min(420px, calc(100vw - 36px)); }
+    .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.22); border-top-color: var(--green); border-radius: 999px; animation: spin .7s linear infinite; vertical-align: -2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 920px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .toolbar { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 620px) {
+      .main { padding: 14px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: 1fr; }
+      .card { grid-template-columns: 1fr; }
+      .score { width: 100%; height: auto; padding: 10px; display: block; }
+      .actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginView" class="login-shell">
+    <form id="loginForm" class="login-card">
+      <p class="eyebrow">NewsHub AI</p>
+      <h1>Radar virale</h1>
+      <p class="muted">Accesso redazione. Dopo il login leggo articoli e punteggi direttamente da Supabase.</p>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" required placeholder="nome@redazione.it">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required placeholder="Password">
+      </div>
+      <button id="loginBtn" class="btn btn-primary" type="submit" style="width:100%; margin-top:18px;">Entra nel radar</button>
+      <div id="loginError" class="error hidden"></div>
+      <p class="small" style="margin-top:14px;margin-bottom:0;">Usa un utente creato in Supabase Auth. Nessuna service key è presente in questa pagina.</p>
+    </form>
+  </section>
+
+  <section id="appView" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div>
+          <p class="eyebrow">NewsHub AI</p>
+          <h2>Radar</h2>
+          <p id="userLabel" class="small"></p>
+        </div>
+        <div class="logo">✦</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric"><b id="totalCount">0</b><span>notizie caricate</span></div>
+        <div class="metric"><b id="breakingCount">0</b><span>breaking cluster</span></div>
+        <div class="metric"><b id="favCount">0</b><span>preferiti</span></div>
+      </div>
+
+      <p class="small">Realtime: <span id="realtimeStatus">non connesso</span></p>
+      <p class="small">Ultimo aggiornamento: <span id="updatedAt">—</span></p>
+      <button id="logoutBtn" class="btn btn-danger" type="button" style="width:100%; margin-top:12px;">Logout</button>
+    </aside>
+
+    <main class="main">
+      <div class="brand">
+        <div>
+          <p class="eyebrow">Breaking & viralità reale</p>
+          <h1>Notizie monitorate</h1>
+          <p class="muted">Ordinate per punteggio virale e freschezza, con preferiti personali salvati su Supabase.</p>
+        </div>
+        <span id="loadingPill" class="pill"><span class="spinner"></span> Caricamento</span>
+      </div>
+
+      <div class="toolbar">
+        <input id="searchInput" type="search" placeholder="Cerca titolo, fonte, area…">
+        <select id="sortSelect" aria-label="Ordinamento">
+          <option value="hot">Più calda + recenti</option>
+          <option value="newest">Più recenti</option>
+          <option value="score">Punteggio virale</option>
+          <option value="oldest">Meno recenti</option>
+        </select>
+        <select id="limitSelect" aria-label="Limite">
+          <option value="100">Ultime 100</option>
+          <option value="200" selected>Ultime 200</option>
+        </select>
+        <button id="favOnlyBtn" class="btn btn-ghost" type="button">Solo preferiti</button>
+        <button id="reloadBtn" class="btn btn-primary" type="button">Aggiorna</button>
+      </div>
+
+      <div class="statusbar">
+        <span id="resultLabel">—</span>
+        <span class="small">Fonte dati: Supabase / articles + clusters + viral_scores</span>
+      </div>
+
+      <div id="newsList" class="news-list"></div>
+      <div id="emptyState" class="empty hidden">Nessuna notizia trovata con i filtri attivi.</div>
+    </main>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    // Configurazione pubblica Supabase per GitHub Pages.
+    // Questa è una publishable key: NON inserire mai SUPABASE_SERVICE_KEY nel frontend.
+    const SUPABASE_URL = 'https://rbhbwepltwvdzvhihpbm.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Vp8G8FQaPa5TW9BeyGrVNA_j6nPgyiF';
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      realtime: { params: { eventsPerSecond: 4 } }
+    });
+
+    const state = {
+      session: null,
+      articles: [],
+      favorites: new Map(),
+      favOnly: false,
+      realtimeChannel: null,
+      loading: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      loginView: $('loginView'), appView: $('appView'), loginForm: $('loginForm'), loginBtn: $('loginBtn'), loginError: $('loginError'),
+      email: $('email'), password: $('password'), userLabel: $('userLabel'), logoutBtn: $('logoutBtn'), loadingPill: $('loadingPill'),
+      searchInput: $('searchInput'), sortSelect: $('sortSelect'), limitSelect: $('limitSelect'), favOnlyBtn: $('favOnlyBtn'), reloadBtn: $('reloadBtn'),
+      newsList: $('newsList'), emptyState: $('emptyState'), resultLabel: $('resultLabel'), totalCount: $('totalCount'), breakingCount: $('breakingCount'),
+      favCount: $('favCount'), realtimeStatus: $('realtimeStatus'), updatedAt: $('updatedAt'), toast: $('toast')
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+
+    function formatDate(value) {
+      if (!value) return 'orario non disponibile';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return 'orario non disponibile';
+      return new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+    }
+
+    function timestamp(value) {
+      const t = value ? new Date(value).getTime() : 0;
+      return Number.isFinite(t) ? t : 0;
+    }
+
+    function setLoading(isLoading) {
+      state.loading = isLoading;
+      els.loadingPill.classList.toggle('hidden', !isLoading);
+      els.reloadBtn.disabled = isLoading;
+    }
+
+    function showToast(message, kind = 'ok') {
+      els.toast.innerHTML = escapeHtml(message);
+      els.toast.style.borderColor = kind === 'error' ? 'rgba(251,113,133,.45)' : 'rgba(110,231,183,.4)';
+      els.toast.classList.remove('hidden');
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => els.toast.classList.add('hidden'), 4200);
+    }
+
+    function showLogin(error = '') {
+      els.loginView.classList.remove('hidden');
+      els.appView.classList.add('hidden');
+      els.loginError.textContent = error;
+      els.loginError.classList.toggle('hidden', !error);
+    }
+
+    function showApp() {
+      els.loginView.classList.add('hidden');
+      els.appView.classList.remove('hidden');
+      els.userLabel.textContent = state.session?.user?.email || '';
+    }
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      els.loginBtn.disabled = true;
+      els.loginError.classList.add('hidden');
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: els.email.value.trim(),
+        password: els.password.value
+      });
+      els.loginBtn.disabled = false;
+      if (error) {
+        showLogin(error.message || 'Login non riuscito.');
+        return;
+      }
+      state.session = data.session;
+      showApp();
+      await afterLogin();
+    }
+
+    async function logout() {
+      if (state.realtimeChannel) await supabaseClient.removeChannel(state.realtimeChannel);
+      state.realtimeChannel = null;
+      await supabaseClient.auth.signOut();
+      state.session = null;
+      state.articles = [];
+      state.favorites.clear();
+      showLogin();
+    }
+
+    async function afterLogin() {
+      showApp();
+      await loadRadar();
+      subscribeRealtime();
+    }
+
+    async function loadFavorites(userId) {
+      const { data, error } = await supabaseClient
+        .from('user_favorites')
+        .select('id, article_id, cluster_id, created_at')
+        .eq('user_id', userId)
+        .not('article_id', 'is', null);
+      if (error) throw error;
+      state.favorites = new Map((data || []).map(row => [row.article_id, row]));
+    }
+
+    async function loadRadar() {
+      if (!state.session?.user) return;
+      setLoading(true);
+      try {
+        const limit = Number(els.limitSelect.value || 200);
+        await loadFavorites(state.session.user.id);
+
+        const { data: articles, error: articlesError } = await supabaseClient
+          .from('articles')
+          .select('id, source_name, title, url, summary, published_at, first_seen_at, fetched_at, area, category')
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .limit(limit);
+        if (articlesError) throw articlesError;
+
+        const articleIds = (articles || []).map(a => a.id).filter(Boolean);
+        let clusterByArticle = new Map();
+        let clustersById = new Map();
+        let latestScoreByCluster = new Map();
+
+        if (articleIds.length) {
+          const { data: mappings, error: mapError } = await supabaseClient
+            .from('article_cluster')
+            .select('article_id, cluster_id')
+            .in('article_id', articleIds);
+          if (mapError) throw mapError;
+          clusterByArticle = new Map((mappings || []).map(row => [row.article_id, row.cluster_id]));
+
+          const clusterIds = [...new Set((mappings || []).map(row => row.cluster_id).filter(Boolean))];
+          if (clusterIds.length) {
+            const { data: clusters, error: clustersError } = await supabaseClient
+              .from('clusters')
+              .select('id, canonical_title, last_seen_at, source_count, article_count, breaking, score, sources')
+              .in('id', clusterIds);
+            if (clustersError) throw clustersError;
+            clustersById = new Map((clusters || []).map(row => [row.id, row]));
+
+            const { data: scores, error: scoresError } = await supabaseClient
+              .from('viral_scores')
+              .select('cluster_id, observed_at, score, score_abs, velocity, acceleration, overlap, source_count, components')
+              .in('cluster_id', clusterIds)
+              .order('observed_at', { ascending: false })
+              .limit(Math.min(clusterIds.length * 4, 1000));
+            if (scoresError) throw scoresError;
+            for (const score of scores || []) {
+              if (!latestScoreByCluster.has(score.cluster_id)) latestScoreByCluster.set(score.cluster_id, score);
+            }
+          }
+        }
+
+        state.articles = (articles || []).map(article => {
+          const clusterId = clusterByArticle.get(article.id) || null;
+          const cluster = clusterId ? clustersById.get(clusterId) : null;
+          const latestScore = clusterId ? latestScoreByCluster.get(clusterId) : null;
+          const score = Number(latestScore?.score ?? cluster?.score ?? 0);
+          return {
+            ...article,
+            cluster_id: clusterId,
+            cluster,
+            score,
+            scoreObservedAt: latestScore?.observed_at || cluster?.last_seen_at || article.fetched_at,
+            sourceCount: Number(latestScore?.source_count ?? cluster?.source_count ?? 1),
+            breaking: Boolean(cluster?.breaking),
+            isFavorite: state.favorites.has(article.id)
+          };
+        });
+
+        els.updatedAt.textContent = formatDate(new Date().toISOString());
+        render();
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || 'Errore nel caricamento dati Supabase.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function getFilteredArticles() {
+      const q = els.searchInput.value.trim().toLowerCase();
+      const sort = els.sortSelect.value;
+      let items = [...state.articles];
+      if (q) {
+        items = items.filter(a => [a.title, a.source_name, a.area, a.category, a.summary].some(v => String(v || '').toLowerCase().includes(q)));
+      }
+      if (state.favOnly) items = items.filter(a => state.favorites.has(a.id));
+      items.sort((a, b) => {
+        const adate = timestamp(a.published_at || a.first_seen_at || a.fetched_at);
+        const bdate = timestamp(b.published_at || b.first_seen_at || b.fetched_at);
+        if (sort === 'newest') return bdate - adate;
+        if (sort === 'oldest') return adate - bdate;
+        if (sort === 'score') return (b.score - a.score) || (b.sourceCount - a.sourceCount) || (bdate - adate);
+        return (b.score - a.score) || (bdate - adate);
+      });
+      return items;
+    }
+
+    function render() {
+      const items = getFilteredArticles();
+      els.totalCount.textContent = String(state.articles.length);
+      els.breakingCount.textContent = String(state.articles.filter(a => a.breaking).length);
+      els.favCount.textContent = String(state.favorites.size);
+      els.resultLabel.textContent = `${items.length} notizie visibili`;
+      els.favOnlyBtn.classList.toggle('btn-primary', state.favOnly);
+      els.favOnlyBtn.textContent = state.favOnly ? 'Tutti gli articoli' : 'Solo preferiti';
+      els.emptyState.classList.toggle('hidden', items.length > 0);
+
+      els.newsList.innerHTML = items.map(article => {
+        const fav = state.favorites.has(article.id);
+        const badge = article.breaking ? '<span class="pill red">🔴 Breaking</span>' : (article.score >= 75 ? '<span class="pill amber">Picco</span>' : '');
+        const sourceLine = [article.source_name, article.area, article.category].filter(Boolean).join(' · ');
+        const why = article.sourceCount > 1 ? `${article.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
+        return `
+          <article class="card" data-id="${escapeHtml(article.id)}">
+            <div>
+              <div class="meta">
+                <span>${escapeHtml(sourceLine || 'Fonte non disponibile')}</span>
+                <span>·</span>
+                <span>${escapeHtml(formatDate(article.published_at || article.first_seen_at || article.fetched_at))}</span>
+                ${badge}
+              </div>
+              <h3 class="card-title">${escapeHtml(article.title)}</h3>
+              ${article.summary ? `<p class="summary">${escapeHtml(article.summary).slice(0, 260)}${article.summary.length > 260 ? '…' : ''}</p>` : ''}
+              <div class="meta" style="margin-top:10px;">
+                <span>Perché può esplodere: ${escapeHtml(why)}</span>
+                ${article.scoreObservedAt ? `<span>· score aggiornato ${escapeHtml(formatDate(article.scoreObservedAt))}</span>` : ''}
+              </div>
+              <div class="actions">
+                <button class="btn btn-star ${fav ? '' : 'off'}" data-action="favorite" data-id="${escapeHtml(article.id)}" title="Preferito">${fav ? '★' : '☆'}</button>
+                <a class="btn" href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">Apri articolo</a>
+              </div>
+            </div>
+            <div class="score"><b>${escapeHtml(article.score)}</b><span>score</span></div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function toggleFavorite(articleId) {
+      const userId = state.session?.user?.id;
+      if (!userId || !articleId) return;
+      const article = state.articles.find(a => a.id === articleId);
+      if (!article) return;
+
+      const existing = state.favorites.get(articleId);
+      try {
+        if (existing) {
+          const { error } = await supabaseClient.from('user_favorites').delete().eq('id', existing.id).eq('user_id', userId);
+          if (error) throw error;
+          state.favorites.delete(articleId);
+          showToast('Rimosso dai preferiti.');
+        } else {
+          const { data, error } = await supabaseClient.from('user_favorites').insert({
+            user_id: userId,
+            article_id: article.id,
+            cluster_id: article.cluster_id || null
+          }).select('id, article_id, cluster_id, created_at').single();
+          if (error) throw error;
+          state.favorites.set(articleId, data);
+          showToast('Salvato nei preferiti.');
+        }
+        render();
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || 'Errore nel salvataggio preferito.', 'error');
+      }
+    }
+
+    let realtimeReloadTimer = null;
+    function scheduleRealtimeReload(payload) {
+      const title = payload?.new?.title ? `Nuova notizia: ${payload.new.title}` : 'Aggiornamento ricevuto da Supabase.';
+      showToast(title);
+      window.clearTimeout(realtimeReloadTimer);
+      realtimeReloadTimer = window.setTimeout(loadRadar, 900);
+    }
+
+    function subscribeRealtime() {
+      if (state.realtimeChannel) return;
+      els.realtimeStatus.textContent = 'connessione…';
+      state.realtimeChannel = supabaseClient
+        .channel('public:articles')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'articles' }, scheduleRealtimeReload)
+        .subscribe((status) => {
+          els.realtimeStatus.textContent = status === 'SUBSCRIBED' ? 'attivo' : status.toLowerCase();
+        });
+    }
+
+    els.loginForm.addEventListener('submit', handleLogin);
+    els.logoutBtn.addEventListener('click', logout);
+    els.reloadBtn.addEventListener('click', loadRadar);
+    els.limitSelect.addEventListener('change', loadRadar);
+    els.searchInput.addEventListener('input', render);
+    els.sortSelect.addEventListener('change', render);
+    els.favOnlyBtn.addEventListener('click', () => { state.favOnly = !state.favOnly; render(); });
+    els.newsList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action="favorite"]');
+      if (button) toggleFavorite(button.dataset.id);
+    });
+
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+      state.session = session;
+    });
+
+    (async function boot() {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error || !data.session) {
+        showLogin();
+        return;
+      }
+      state.session = data.session;
+      await afterLogin();
+    })();
+  </script>
+</body>
+</html>
