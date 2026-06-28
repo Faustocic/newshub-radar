@@ -28,8 +28,17 @@ except Exception:  # supabase-py non installato: il radar resta leggibile, stora
 PORT = 8768
 ROOT = Path(__file__).resolve().parent
 SOURCES_FILE = ROOT / "sources.json"
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+def env_first(*names: str) -> str:
+    """Legge la prima variabile d'ambiente non vuota, ripulita da spazi accidentali."""
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+SUPABASE_URL = env_first("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_SERVICE_KEY = env_first("SUPABASE_SERVICE_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY")
 SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY and create_client)
 _SUPABASE_CLIENT = None
 # Segnale breaking Livello 1: stessa storia coperta da almeno N fonti RSS distinte nello stesso fetch.
@@ -1042,7 +1051,12 @@ def story_from_item(item: dict, feed: dict) -> dict | None:
     age = format_age(age_minutes)
 
     text = f"{title} {summary} {' '.join(item.get('categories', []))}".lower()
-    area, category = classify_area(text, feed["category"], feed["name"])
+    area, category = classify_area(
+        text,
+        feed.get("area") or feed["category"],
+        feed["category"],
+        feed["name"],
+    )
     tags = build_tags(text, area, category, item.get("categories", []))
     authority = int(feed.get("authority") or source_authority(feed["name"]))
     components = score_components(
@@ -1126,7 +1140,7 @@ def normalize_for_id(value: str) -> str:
     return re.sub(r"\s+", " ", clean_text(value).lower()).strip()
 
 
-def classify_area(text: str, fallback_category: str, source_name: str = "") -> tuple[str, str]:
+def classify_area(text: str, fallback_area: str, fallback_category: str, source_name: str = "") -> tuple[str, str]:
     local_calabria_sources = {
         "ANSA Calabria", "ReggioToday", "CatanzaroInforma", "CrotoneNews",
         "Il Crotonese", "Zoom24", "Calabria Diretta News", "CN24", "CityNow",
@@ -1176,7 +1190,7 @@ def classify_area(text: str, fallback_category: str, source_name: str = "") -> t
             continue
         if any(has_keyword(text, keyword) for keyword in keywords):
             return area, category
-    return fallback_category, fallback_category
+    return fallback_area or fallback_category, fallback_category
 
 
 def has_keyword(text: str, keyword: str) -> bool:
