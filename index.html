@@ -85,6 +85,11 @@
     .empty { border: 1px dashed var(--line-strong); border-radius: 18px; padding: 28px; color: var(--muted); text-align: center; }
     .panel { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.025); padding: 13px; margin-top: 13px; }
     .panel h3 { font-size: 14px; margin: 0 0 10px; }
+    .panel-header { width: 100%; border: 0; background: transparent; color: var(--text); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0; margin: 0 0 10px; text-align: left; font-weight: 800; }
+    .panel-header h3 { margin: 0; }
+    .panel-arrow { color: var(--muted); font-size: 14px; }
+    .panel.collapsed .panel-body { display: none; }
+    .panel.collapsed .panel-header { margin-bottom: 0; }
     .nav { display: grid; gap: 7px; }
     .nav-btn { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 12px; padding: 9px 10px; color: var(--muted); background: transparent; text-align: left; }
     .nav-btn:hover { border-color: var(--line-strong); color: var(--text); background: rgba(255,255,255,.035); }
@@ -113,6 +118,9 @@
     .export-message { min-height: 18px; color: var(--green); font-size: 12px; margin-top: 9px; }
     .print-area { display: none; }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(110,231,183,.4); border-radius: 16px; background: rgba(16,17,15,.95); color: var(--text); padding: 12px 14px; box-shadow: 0 20px 60px rgba(0,0,0,.4); max-width: min(420px, calc(100vw - 36px)); }
+    .mobile-menu-btn, .sidebar-close, .sidebar-backdrop, .backtop { display: none; }
+    .backtop { position: fixed; right: 18px; bottom: 18px; z-index: 30; width: 46px; height: 46px; border-radius: 999px; border: 1px solid rgba(110,231,183,.45); background: rgba(16,17,15,.92); color: var(--text); box-shadow: 0 16px 50px rgba(0,0,0,.4); font-size: 20px; }
+    .backtop.show { display: block; }
     .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.22); border-top-color: var(--green); border-radius: 999px; animation: spin .7s linear infinite; vertical-align: -2px; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -128,7 +136,12 @@
     }
     @media (max-width: 920px) {
       .app { grid-template-columns: 1fr; }
-      .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 50; width: min(86vw, 330px); height: 100vh; border-right: 1px solid var(--line); border-bottom: 0; transform: translateX(-105%); transition: transform .22s ease; box-shadow: 30px 0 80px rgba(0,0,0,.45); }
+      body.sidebar-open .sidebar { transform: translateX(0); }
+      .sidebar-backdrop { display: none; position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+      body.sidebar-open .sidebar-backdrop { display: block; }
+      .mobile-menu-btn { display: inline-flex; position: sticky; top: 10px; z-index: 35; margin: 10px 0 0 12px; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(16,17,15,.92); color: var(--text); align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+      .sidebar-close { display: inline-flex; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--text); align-items: center; justify-content: center; font-size: 20px; }
       .main { border-right: 0; }
       .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -164,6 +177,8 @@
   </section>
 
   <section id="appView" class="app hidden">
+    <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" aria-label="Apri filtri">☰</button>
+    <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
     <aside class="sidebar">
       <div class="brand">
         <div>
@@ -171,6 +186,7 @@
           <h2>Radar</h2>
           <p id="userLabel" class="small"></p>
         </div>
+        <button id="sidebarClose" class="sidebar-close" type="button" aria-label="Chiudi filtri">×</button>
         <div class="logo">✦</div>
       </div>
 
@@ -181,23 +197,23 @@
         <div class="metric"><b id="favCount">0</b><span>preferiti</span></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapsible="true" data-panel="area">
         <h3>Area / tema</h3>
         <nav id="categoryNav" class="nav" aria-label="Categorie"></nav>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapsible="true" data-panel="exclude" data-mobile-collapsed="true">
         <h3>Escludi aree/temi</h3>
         <div id="excludeChips" class="chips"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapsible="true" data-panel="hot" data-mobile-collapsed="true">
         <h3>Termini caldi</h3>
         <p class="small" style="margin:0 0 9px;">Keyword più frequenti nelle notizie visibili, calcolate da titoli e summary reali.</p>
         <div id="hotKeywords" class="nav"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapsible="true" data-panel="threshold" data-mobile-collapsed="true">
         <h3>Soglia virale</h3>
         <div class="threshold-row">
           <input id="thresholdInput" type="range" min="0" max="100" value="0" aria-label="Soglia virale">
@@ -206,7 +222,7 @@
         <p class="small" style="margin:9px 0 0;">Filtra per score minimo reale da Supabase.</p>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-collapsible="true" data-panel="export" data-mobile-collapsed="true">
         <h3>Export lista filtrata</h3>
         <div class="chips">
           <button id="exportTxt" class="mini-btn" type="button">TXT</button>
@@ -272,6 +288,7 @@
   </section>
 
   <div id="toast" class="toast hidden"></div>
+  <button id="backTopBtn" class="backtop" type="button" aria-label="Torna su">↑</button>
   <div id="printArea" class="print-area" aria-hidden="true"></div>
 
   <script>
@@ -285,7 +302,7 @@
       realtime: { params: { eventsPerSecond: 4 } }
     });
 
-    const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
+    const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Catania', 'Palermo', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
     const STOPWORDS_IT = new Set([
       'alla','allo','alle','agli','dalla','dallo','dalle','dagli','nella','nello','nelle','negli','sulla','sullo','sulle','sugli',
       'con','per','tra','fra','del','dello','della','dei','degli','delle','nel','nei','che','chi','cui','come','dove','quando',
@@ -801,6 +818,56 @@
         });
     }
 
+    function setupCollapsiblePanels() {
+      const isMobile = window.matchMedia('(max-width: 920px)').matches;
+      document.querySelectorAll('.sidebar .panel[data-collapsible="true"]').forEach((panel) => {
+        if (panel.dataset.ready === 'true') return;
+        const heading = panel.querySelector('h3');
+        if (!heading) return;
+        const title = heading.textContent.trim();
+        const body = document.createElement('div');
+        body.className = 'panel-body';
+        while (heading.nextSibling) body.appendChild(heading.nextSibling);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'panel-header';
+        button.setAttribute('aria-expanded', 'true');
+        button.innerHTML = `<h3>${escapeHtml(title)}</h3><span class="panel-arrow">▾</span>`;
+        heading.replaceWith(button);
+        panel.appendChild(body);
+        panel.dataset.ready = 'true';
+        if (isMobile && panel.dataset.mobileCollapsed === 'true') setPanelCollapsed(panel, true);
+        button.addEventListener('click', () => setPanelCollapsed(panel, !panel.classList.contains('collapsed')));
+      });
+    }
+
+    function setPanelCollapsed(panel, collapsed) {
+      panel.classList.toggle('collapsed', collapsed);
+      const button = panel.querySelector('.panel-header');
+      const arrow = panel.querySelector('.panel-arrow');
+      if (button) button.setAttribute('aria-expanded', String(!collapsed));
+      if (arrow) arrow.textContent = collapsed ? '▸' : '▾';
+    }
+
+    function setupMobileNavigation() {
+      const openBtn = document.getElementById('mobileMenuBtn');
+      const closeBtn = document.getElementById('sidebarClose');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      const backTop = document.getElementById('backTopBtn');
+      const openSidebar = () => document.body.classList.add('sidebar-open');
+      const closeSidebar = () => document.body.classList.remove('sidebar-open');
+      openBtn?.addEventListener('click', openSidebar);
+      closeBtn?.addEventListener('click', closeSidebar);
+      backdrop?.addEventListener('click', closeSidebar);
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeSidebar();
+      });
+      window.addEventListener('scroll', () => {
+        backTop?.classList.toggle('show', window.scrollY > 420);
+      }, { passive: true });
+      backTop?.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    }
+
     els.loginForm.addEventListener('submit', handleLogin);
     els.logoutBtn.addEventListener('click', logout);
     els.reloadBtn.addEventListener('click', loadRadar);
@@ -850,6 +917,9 @@
       if (action === 'copy') copyExport();
       if (action === 'print') printExport();
     });
+
+    setupCollapsiblePanels();
+    setupMobileNavigation();
 
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       state.session = session;
