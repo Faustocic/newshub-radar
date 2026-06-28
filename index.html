@@ -144,12 +144,15 @@
       .sidebar-close { display: inline-flex; width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--text); align-items: center; justify-content: center; font-size: 20px; }
       .main { border-right: 0; }
       .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .metric { padding: 8px 6px; border-radius: 12px; text-align: center; }
+      .metric b { font-size: 18px; }
+      .metric span { font-size: 10px; line-height: 1.15; }
       .toolbar { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 620px) {
       .main { padding: 14px; }
       .toolbar { grid-template-columns: 1fr; }
-      .metric-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
       .card, .score-big { grid-template-columns: 1fr; }
       .score { width: 100%; height: auto; padding: 10px; display: block; }
       .actions { justify-content: flex-start; }
@@ -648,28 +651,84 @@
       return items;
     }
 
+    function articlePublishedValue(article) {
+      return article.displayPublishedAt || article.published_at || article.first_seen_at || article.fetched_at;
+    }
+
+    function representativeRank(article) {
+      const authorityComponent = Number(article?.components?.authority);
+      const authorityScore = Number.isFinite(authorityComponent) ? authorityComponent : 0;
+      return {
+        authority: authorityScore,
+        score: Number(article?.score || 0),
+        sources: Number(article?.sourceCount || 1),
+        time: timestamp(article?.published_at || article?.first_seen_at || article?.fetched_at)
+      };
+    }
+
+    function betterRepresentative(candidate, current) {
+      if (!current) return candidate;
+      const a = representativeRank(candidate);
+      const b = representativeRank(current);
+      if (a.authority !== b.authority) return a.authority > b.authority ? candidate : current;
+      if (a.score !== b.score) return a.score > b.score ? candidate : current;
+      if (a.sources !== b.sources) return a.sources > b.sources ? candidate : current;
+      return a.time >= b.time ? candidate : current;
+    }
+
+    function groupArticlesForDisplay(articles) {
+      const groups = new Map();
+      for (const article of articles) {
+        const key = article.cluster_id ? `cluster:${article.cluster_id}` : `article:${article.id}`;
+        const articleTime = timestamp(article.published_at || article.first_seen_at || article.fetched_at);
+        const existing = groups.get(key);
+        if (!existing) {
+          groups.set(key, {
+            representative: article,
+            latestTime: articleTime,
+            latestPublishedAt: article.published_at || article.first_seen_at || article.fetched_at,
+            articles: [article]
+          });
+          continue;
+        }
+        existing.representative = betterRepresentative(article, existing.representative);
+        existing.articles.push(article);
+        if (articleTime > existing.latestTime) {
+          existing.latestTime = articleTime;
+          existing.latestPublishedAt = article.published_at || article.first_seen_at || article.fetched_at;
+        }
+      }
+      return [...groups.values()].map(group => ({
+        ...group.representative,
+        displayPublishedAt: group.latestPublishedAt,
+        groupedArticleCount: group.articles.length,
+        displayTitle: group.representative.cluster?.canonical_title || group.representative.title
+      }));
+    }
+
     function render() {
       renderCategories();
       const items = getFilteredArticles();
+      const displayItems = groupArticlesForDisplay(items);
       els.totalCount.textContent = String(state.articles.length);
-      els.visibleCount.textContent = String(items.length);
+      els.visibleCount.textContent = String(displayItems.length);
       els.breakingCount.textContent = String(state.articles.filter(a => a.breaking).length);
       els.favCount.textContent = String(state.favorites.size);
       els.thresholdLabel.textContent = `${els.thresholdInput.value}+`;
-      els.resultLabel.textContent = `${items.length} notizie visibili · filtro: ${state.currentCategory}`;
+      els.resultLabel.textContent = `${displayItems.length} storie visibili · ${items.length} articoli · filtro: ${state.currentCategory}`;
       els.favOnlyBtn.classList.toggle('btn-primary', state.favOnly);
       els.favOnlyBtn.textContent = state.favOnly ? 'Tutti gli articoli' : 'Solo preferiti';
-      els.emptyState.classList.toggle('hidden', items.length > 0);
-      if (items.length && !items.some(a => a.id === state.selectedId)) state.selectedId = items[0].id;
+      els.emptyState.classList.toggle('hidden', displayItems.length > 0);
+      if (displayItems.length && !displayItems.some(a => a.id === state.selectedId)) state.selectedId = displayItems[0].id;
 
-      els.newsList.innerHTML = items.map(article => {
+      els.newsList.innerHTML = displayItems.map(article => {
         const fav = state.favorites.has(article.id);
         const selected = state.selectedId === article.id ? 'selected' : '';
         const breakingHelp = 'Breaking = la stessa storia è ripresa da almeno 3 fonti RSS distinte nello stesso ciclo di scansione. Non misura condivisioni social né Google Discover.';
         const badge = article.breaking ? `<span class="pill red" title="${escapeHtml(breakingHelp)}">🔴 Breaking ⓘ</span>` : (article.score >= 75 ? '<span class="pill amber">Picco</span>' : '');
         const sourceLine = [article.source_name, article.area, article.category].filter(Boolean).join(' · ');
         const why = article.sourceCount > 1 ? `${article.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
-        const publishedValue = article.published_at || article.first_seen_at || article.fetched_at;
+        const publishedValue = articlePublishedValue(article);
         const sourceBadge = article.sourceCount > 1 ? `${article.sourceCount} fonti` : 'fonte singola';
         return `
           <article class="card ${selected}" data-id="${escapeHtml(article.id)}">
@@ -683,7 +742,7 @@
                 <span class="pill gray">${escapeHtml(sourceBadge)}</span>
                 ${badge}
               </div>
-              <h3 class="card-title">${escapeHtml(article.title)}</h3>
+              <h3 class="card-title">${escapeHtml(article.displayTitle || article.title)}</h3>
               ${article.summary ? `<p class="summary">${escapeHtml(article.summary).slice(0, 260)}${article.summary.length > 260 ? '…' : ''}</p>` : ''}
               <div class="meta" style="margin-top:10px;">
                 <span>Perché può esplodere: ${escapeHtml(why)}</span>
@@ -700,7 +759,7 @@
         `;
       }).join('');
       renderHotKeywords(items);
-      renderAnalysis(items.find(a => a.id === state.selectedId) || null);
+      renderAnalysis(displayItems.find(a => a.id === state.selectedId) || null);
     }
 
     function componentValue(article, key) {
@@ -729,11 +788,11 @@
       const sources = Array.isArray(article.cluster?.sources) ? article.cluster.sources : [];
       const breakingHelp = 'Breaking = la stessa storia è ripresa da almeno 3 fonti RSS distinte nello stesso ciclo di scansione. Non misura condivisioni social né Google Discover.';
       els.analysisPanel.innerHTML = `
-        <h3 class="analysis-title">${escapeHtml(article.title)}</h3>
+        <h3 class="analysis-title">${escapeHtml(article.displayTitle || article.title)}</h3>
         <div class="meta">
           <span>${escapeHtml(article.source_name || 'Fonte non disponibile')}</span>
           <span>·</span>
-          <span>${escapeHtml(formatDate(article.published_at || article.first_seen_at || article.fetched_at))}</span>
+          <span>${escapeHtml(formatDate(articlePublishedValue(article)))}</span>
         </div>
         <div class="score-big">
           <div class="score-circle"><b>${escapeHtml(article.score)}</b></div>
@@ -775,15 +834,15 @@
     }
 
     function exportText(markdown = false) {
-      const rows = getFilteredArticles();
+      const rows = groupArticlesForDisplay(getFilteredArticles());
       const title = `Radar notizie — ${formatDate(new Date().toISOString())}`;
       const blocks = rows.map((a, index) => {
         const area = [a.area, a.category].filter(Boolean).join(' / ') || 'n/d';
         const why = a.sourceCount > 1 ? `${a.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
         if (markdown) {
-          return [`## ${index + 1}. ${a.title}`, `- Fonte: ${a.source_name || 'n/d'}`, `- Area/categoria: ${area}`, `- Score: ${a.score}`, `- Orario: ${formatDate(a.published_at || a.first_seen_at || a.fetched_at)}`, `- Link: ${a.url}`, `- Perché può esplodere: ${why}`].join('\n');
+          return [`## ${index + 1}. ${a.displayTitle || a.title}`, `- Fonte: ${a.source_name || 'n/d'}`, `- Area/categoria: ${area}`, `- Score: ${a.score}`, `- Orario: ${formatDate(articlePublishedValue(a))}`, `- Link: ${a.url}`, `- Perché può esplodere: ${why}`].join('\n');
         }
-        return [`${index + 1}. ${a.title}`, `Fonte: ${a.source_name || 'n/d'}`, `Area/categoria: ${area}`, `Score: ${a.score}`, `Orario: ${formatDate(a.published_at || a.first_seen_at || a.fetched_at)}`, `Link: ${a.url}`, `Perché può esplodere: ${why}`].join('\n');
+        return [`${index + 1}. ${a.displayTitle || a.title}`, `Fonte: ${a.source_name || 'n/d'}`, `Area/categoria: ${area}`, `Score: ${a.score}`, `Orario: ${formatDate(articlePublishedValue(a))}`, `Link: ${a.url}`, `Perché può esplodere: ${why}`].join('\n');
       });
       return markdown ? [`# ${title}`, '', `Notizie esportate: ${rows.length}`, '', ...blocks].join('\n\n') : [title, `Notizie esportate: ${rows.length}`, '', ...blocks].join('\n\n');
     }
@@ -816,13 +875,13 @@
     }
 
     function printExport() {
-      const rows = getFilteredArticles();
+      const rows = groupArticlesForDisplay(getFilteredArticles());
       els.printArea.innerHTML = `
         <h1>Radar notizie — ${escapeHtml(formatDate(new Date().toISOString()))}</h1>
         <p>Notizie esportate: ${rows.length}</p>
         ${rows.map((a, index) => {
           const why = a.sourceCount > 1 ? `${a.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
-          return `<div class="print-item"><h2>${index + 1}. ${escapeHtml(a.title)}</h2><p><b>Fonte:</b> ${escapeHtml(a.source_name || 'n/d')} · <b>Score:</b> ${escapeHtml(a.score)} · <b>Orario:</b> ${escapeHtml(formatDate(a.published_at || a.first_seen_at || a.fetched_at))}</p><p><b>Area/categoria:</b> ${escapeHtml([a.area, a.category].filter(Boolean).join(' / ') || 'n/d')}</p><p><b>Perché può esplodere:</b> ${escapeHtml(why)}</p><p><a href="${escapeHtml(a.url)}">${escapeHtml(a.url)}</a></p></div>`;
+          return `<div class="print-item"><h2>${index + 1}. ${escapeHtml(a.displayTitle || a.title)}</h2><p><b>Fonte:</b> ${escapeHtml(a.source_name || 'n/d')} · <b>Score:</b> ${escapeHtml(a.score)} · <b>Orario:</b> ${escapeHtml(formatDate(articlePublishedValue(a)))}</p><p><b>Area/categoria:</b> ${escapeHtml([a.area, a.category].filter(Boolean).join(' / ') || 'n/d')}</p><p><b>Perché può esplodere:</b> ${escapeHtml(why)}</p><p><a href="${escapeHtml(a.url)}">${escapeHtml(a.url)}</a></p></div>`;
         }).join('')}
       `;
       document.body.classList.add('printing');
@@ -942,6 +1001,9 @@
       if (!button) return;
       state.currentCategory = button.dataset.category;
       render();
+      if (window.matchMedia('(max-width: 920px)').matches) {
+        document.body.classList.remove('sidebar-open');
+      }
     });
     els.excludeChips.addEventListener('click', (event) => {
       const button = event.target.closest('[data-exclude]');
