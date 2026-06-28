@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="it">
 <head>
@@ -346,6 +347,19 @@
       return new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'short' }).format(date);
     }
 
+    function formatRelativeTime(value) {
+      if (!value) return 'tempo n/d';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return 'tempo n/d';
+      const diffMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+      if (diffMinutes < 1) return 'ora';
+      if (diffMinutes < 60) return `${diffMinutes} min fa`;
+      const hours = Math.floor(diffMinutes / 60);
+      if (hours < 24) return `${hours} ${hours === 1 ? 'ora' : 'ore'} fa`;
+      const days = Math.floor(hours / 24);
+      return `${days} ${days === 1 ? 'giorno' : 'giorni'} fa`;
+    }
+
     function timestamp(value) {
       const t = value ? new Date(value).getTime() : 0;
       return Number.isFinite(t) ? t : 0;
@@ -613,13 +627,18 @@
         const badge = article.breaking ? `<span class="pill red" title="${escapeHtml(breakingHelp)}">🔴 Breaking ⓘ</span>` : (article.score >= 75 ? '<span class="pill amber">Picco</span>' : '');
         const sourceLine = [article.source_name, article.area, article.category].filter(Boolean).join(' · ');
         const why = article.sourceCount > 1 ? `${article.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
+        const publishedValue = article.published_at || article.first_seen_at || article.fetched_at;
+        const sourceBadge = article.sourceCount > 1 ? `${article.sourceCount} fonti` : 'fonte singola';
         return `
           <article class="card ${selected}" data-id="${escapeHtml(article.id)}">
             <div>
               <div class="meta">
                 <span>${escapeHtml(sourceLine || 'Fonte non disponibile')}</span>
                 <span>·</span>
-                <span>${escapeHtml(formatDate(article.published_at || article.first_seen_at || article.fetched_at))}</span>
+                <span>${escapeHtml(formatDate(publishedValue))}</span>
+                <span>·</span>
+                <span>${escapeHtml(formatRelativeTime(publishedValue))}</span>
+                <span class="pill gray">${escapeHtml(sourceBadge)}</span>
                 ${badge}
               </div>
               <h3 class="card-title">${escapeHtml(article.title)}</h3>
