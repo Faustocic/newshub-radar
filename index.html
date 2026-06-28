@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="it">
 <head>
@@ -447,14 +446,42 @@
         const limit = Number(els.limitSelect.value || 200);
         await loadFavorites(state.session.user.id);
 
-        const { data: articles, error: articlesError } = await supabaseClient
+        const articleSelect = 'id, source_name, title, url, summary, published_at, first_seen_at, fetched_at, area, category';
+        const localAreas = ['Sicilia', 'Calabria', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Catania', 'Palermo'];
+
+        const generalRequest = supabaseClient
           .from('articles')
-          .select('id, source_name, title, url, summary, published_at, first_seen_at, fetched_at, area, category')
+          .select(articleSelect)
           .order('published_at', { ascending: false, nullsFirst: false })
           .limit(limit);
-        if (articlesError) throw articlesError;
 
-        const articleIds = (articles || []).map(a => a.id).filter(Boolean);
+        const localRequests = localAreas.map(area => supabaseClient
+          .from('articles')
+          .select(articleSelect)
+          .eq('area', area)
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .limit(40));
+
+        const [generalResult, ...localResults] = await Promise.all([generalRequest, ...localRequests]);
+        if (generalResult.error) throw generalResult.error;
+        for (const result of localResults) {
+          if (result.error) throw result.error;
+        }
+
+        const articleMap = new Map();
+        for (const article of generalResult.data || []) {
+          if (article?.id) articleMap.set(article.id, article);
+        }
+        for (const result of localResults) {
+          for (const article of result.data || []) {
+            if (article?.id && !articleMap.has(article.id)) articleMap.set(article.id, article);
+          }
+        }
+        const articles = [...articleMap.values()].sort((a, b) =>
+          timestamp(b.published_at || b.first_seen_at || b.fetched_at) - timestamp(a.published_at || a.first_seen_at || a.fetched_at)
+        );
+
+        const articleIds = articles.map(a => a.id).filter(Boolean);
         let clusterByArticle = new Map();
         let clustersById = new Map();
         let latestScoreByCluster = new Map();
