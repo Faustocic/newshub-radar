@@ -592,7 +592,8 @@
       els.newsList.innerHTML = items.map(article => {
         const fav = state.favorites.has(article.id);
         const selected = state.selectedId === article.id ? 'selected' : '';
-        const badge = article.breaking ? '<span class="pill red">🔴 Breaking</span>' : (article.score >= 75 ? '<span class="pill amber">Picco</span>' : '');
+        const breakingHelp = 'Breaking = la stessa storia è ripresa da almeno 3 fonti RSS distinte nello stesso ciclo di scansione. Non misura condivisioni social né Google Discover.';
+        const badge = article.breaking ? `<span class="pill red" title="${escapeHtml(breakingHelp)}">🔴 Breaking ⓘ</span>` : (article.score >= 75 ? '<span class="pill amber">Picco</span>' : '');
         const sourceLine = [article.source_name, article.area, article.category].filter(Boolean).join(' · ');
         const why = article.sourceCount > 1 ? `${article.sourceCount} fonti nel cluster` : 'copertura da singola fonte';
         return `
@@ -630,12 +631,12 @@
       return Number.isFinite(value) ? value : null;
     }
 
-    function bar(label, value, note = '') {
+    function bar(label, value, note = '', tooltip = '') {
       const ok = Number.isFinite(value);
       const width = ok ? Math.max(0, Math.min(100, value)) : 0;
       return `
         <div class="bar-row">
-          <div class="bar-head"><span>${escapeHtml(label)}</span><b>${ok ? `${Math.round(value)}%` : 'n/d'}</b></div>
+          <div class="bar-head"><span title="${escapeHtml(tooltip)}">${escapeHtml(label)} ${tooltip ? 'ⓘ' : ''}</span><b>${ok ? `${Math.round(value)}%` : 'n/d'}</b></div>
           <div class="bar"><span style="width:${width}%"></span></div>
           ${note ? `<div class="small">${escapeHtml(note)}</div>` : ''}
         </div>
@@ -648,6 +649,7 @@
         return;
       }
       const sources = Array.isArray(article.cluster?.sources) ? article.cluster.sources : [];
+      const breakingHelp = 'Breaking = la stessa storia è ripresa da almeno 3 fonti RSS distinte nello stesso ciclo di scansione. Non misura condivisioni social né Google Discover.';
       els.analysisPanel.innerHTML = `
         <h3 class="analysis-title">${escapeHtml(article.title)}</h3>
         <div class="meta">
@@ -658,19 +660,20 @@
         <div class="score-big">
           <div class="score-circle"><b>${escapeHtml(article.score)}</b></div>
           <div>
-            <span class="pill ${article.breaking ? 'red' : 'gray'}">${article.breaking ? '🔴 Breaking' : 'Monitoraggio'}</span>
+            <span class="pill ${article.breaking ? 'red' : 'gray'}" title="${escapeHtml(article.breaking ? breakingHelp : 'Monitoraggio: il cluster non raggiunge la soglia breaking.')}">${article.breaking ? '🔴 Breaking ⓘ' : 'Monitoraggio'}</span>
             <p class="small" style="margin-top:8px;">Score reale dall’ultimo record disponibile in viral_scores o clusters.</p>
           </div>
         </div>
         <div class="panel">
           <h3>Breakdown score</h3>
           <div class="breakdown">
-            ${bar('Cross-source', componentValue(article, 'crossSource'), 'Proxy reale: pubblicazione della stessa storia su più fonti RSS.')}
-            ${bar('Freschezza', componentValue(article, 'freshness'))}
-            ${bar('Autorevolezza fonte', componentValue(article, 'authority'))}
-            ${bar('Keyword sensibili', componentValue(article, 'keywords'))}
-            ${bar('Località / prossimità', componentValue(article, 'locality'))}
+            ${bar('Cross-source', componentValue(article, 'crossSource'), 'Proxy reale: pubblicazione della stessa storia su più fonti RSS.', 'Reale: numero di fonti RSS distinte che coprono la storia.')}
+            ${bar('Freschezza', componentValue(article, 'freshness'), '', 'Reale, dagli orari RSS. Nota: se una fonte non fornisce la data, può risultare più alta del dovuto.')}
+            ${bar('Autorevolezza fonte', componentValue(article, 'authority'), '', 'Valore editoriale configurato per testata (es. ANSA, AGI), non una misura esterna.')}
+            ${bar('Keyword sensibili', componentValue(article, 'keywords'), '', 'Conteggio di parole-chiave editoriali rilevanti nel testo (lista predefinita).')}
+            ${bar('Località / prossimità', componentValue(article, 'locality'), '', 'Regola editoriale: Sicilia e Calabria pesano di più perché centrali per il radar.')}
           </div>
+          <div class="note" style="margin-top:10px;">Score virale RSS: proxy editoriale basato su copertura cross-source, freschezza, autorevolezza configurata delle fonti, keyword sensibili e prossimità territoriale. Non misura viralità social né Discover.</div>
           <p class="small" style="margin:10px 0 0;">Se un valore è n/d, il dato non è presente nel JSON components salvato su Supabase.</p>
         </div>
         <div class="panel">
