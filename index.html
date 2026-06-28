@@ -302,7 +302,9 @@
       realtime: { params: { eventsPerSecond: 4 } }
     });
 
-    const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Catania', 'Palermo', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
+    const AREA_GAZZETTA = ['Messina', 'Reggio Calabria', 'Cosenza', 'Catanzaro', 'Crotone', 'Vibo Valentia', 'Area dello Stretto'];
+    const HIDDEN_SIDEBAR_CATEGORIES = new Set(['Area dello Stretto']);
+    const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Area Gazzetta', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Vibo Valentia', 'Catania', 'Palermo', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
     const STOPWORDS_IT = new Set([
       'alla','allo','alle','agli','dalla','dallo','dalle','dagli','nella','nello','nelle','negli','sulla','sullo','sulle','sugli',
       'con','per','tra','fra','del','dello','della','dei','degli','delle','nel','nei','che','chi','cui','come','dove','quando',
@@ -366,6 +368,17 @@
 
     function areasOf(article) {
       return [article.category, article.area].filter(Boolean);
+    }
+
+    function isInAreaGazzetta(article) {
+      const articleAreas = areasOf(article);
+      return articleAreas.some(area => AREA_GAZZETTA.includes(area));
+    }
+
+    function matchesCategory(article, category) {
+      if (category === 'Tutte') return true;
+      if (category === 'Area Gazzetta') return isInAreaGazzetta(article);
+      return areasOf(article).includes(category);
     }
 
     function setLoading(isLoading) {
@@ -552,6 +565,7 @@
       for (const article of state.articles) {
         for (const name of areasOf(article)) counts.set(name, (counts.get(name) || 0) + 1);
       }
+      counts.set('Area Gazzetta', state.articles.filter(isInAreaGazzetta).length);
       for (const core of CORE_CATEGORIES) if (!counts.has(core)) counts.set(core, 0);
       return counts;
     }
@@ -560,14 +574,15 @@
       const counts = categoryCounts();
       const names = [...new Set([
         ...CORE_CATEGORIES,
-        ...[...counts.keys()].filter(name => name !== 'Tutte').sort((a, b) => (counts.get(b) - counts.get(a)) || a.localeCompare(b, 'it'))
-      ])];
+        ...[...counts.keys()].filter(name => name !== 'Tutte' && !HIDDEN_SIDEBAR_CATEGORIES.has(name)).sort((a, b) => (counts.get(b) - counts.get(a)) || a.localeCompare(b, 'it'))
+      ])].filter(name => !HIDDEN_SIDEBAR_CATEGORIES.has(name));
       els.categoryNav.innerHTML = names.map(name => `
         <button type="button" class="nav-btn ${state.currentCategory === name ? 'active' : ''}" data-category="${escapeHtml(name)}">
           <span>${escapeHtml(name)}</span><span class="count">${counts.get(name) || 0}</span>
         </button>
       `).join('');
-      const chipNames = [...new Set([...CORE_CATEGORIES.filter(name => name !== 'Tutte'), ...[...counts.keys()].filter(name => name !== 'Tutte')])]
+      const chipNames = [...new Set([...CORE_CATEGORIES.filter(name => name !== 'Tutte'), ...[...counts.keys()].filter(name => name !== 'Tutte' && !HIDDEN_SIDEBAR_CATEGORIES.has(name))])]
+        .filter(name => !HIDDEN_SIDEBAR_CATEGORIES.has(name))
         .sort((a, b) => a.localeCompare(b, 'it'));
       els.excludeChips.innerHTML = chipNames.map(name => `
         <button type="button" class="chip ${state.excluded.has(name) ? 'excluded' : ''}" data-exclude="${escapeHtml(name)}">${escapeHtml(name)}</button>
@@ -613,10 +628,10 @@
       const threshold = Number(els.thresholdInput.value || 0);
       let items = [...state.articles].filter(a => Number(a.score || 0) >= threshold);
       if (state.currentCategory !== 'Tutte') {
-        items = items.filter(a => areasOf(a).includes(state.currentCategory));
+        items = items.filter(a => matchesCategory(a, state.currentCategory));
       }
       if (state.excluded.size) {
-        items = items.filter(a => !areasOf(a).some(name => state.excluded.has(name)));
+        items = items.filter(a => !areasOf(a).some(name => state.excluded.has(name)) && !(state.excluded.has('Area Gazzetta') && isInAreaGazzetta(a)));
       }
       if (q) {
         items = items.filter(a => [a.title, a.source_name, a.area, a.category, a.summary].some(v => String(v || '').toLowerCase().includes(q)));
