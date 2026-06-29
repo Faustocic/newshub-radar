@@ -337,7 +337,8 @@
       selectedId: null,
       alertedBreakingClusters: new Set(),
       breakingAlertSeeded: false,
-      currentBreakingAlertIds: []
+      currentBreakingAlertIds: [],
+      autoRefreshTimer: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -537,6 +538,7 @@
     }
 
     async function logout() {
+      stopAutoRefresh();
       if (state.realtimeChannel) await supabaseClient.removeChannel(state.realtimeChannel);
       state.realtimeChannel = null;
       await supabaseClient.auth.signOut();
@@ -555,6 +557,7 @@
       restorePersistedFilters();
       await loadRadar();
       subscribeRealtime();
+      startAutoRefresh();
     }
 
     async function loadFavorites(userId) {
@@ -1035,6 +1038,31 @@
         });
     }
 
+    function stopAutoRefresh() {
+      if (state.autoRefreshTimer) {
+        window.clearInterval(state.autoRefreshTimer);
+        state.autoRefreshTimer = null;
+      }
+    }
+
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      if (!state.session || document.hidden) return;
+      state.autoRefreshTimer = window.setInterval(() => {
+        if (document.hidden || state.loading || !state.session) return;
+        loadRadar();
+      }, 120000);
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        stopAutoRefresh();
+        return;
+      }
+      startAutoRefresh();
+      if (!state.loading && state.session) loadRadar();
+    }
+
     function setupCollapsiblePanels() {
       const isMobile = window.matchMedia('(max-width: 920px)').matches;
       document.querySelectorAll('.sidebar .panel[data-collapsible="true"]').forEach((panel) => {
@@ -1160,6 +1188,7 @@
 
     setupCollapsiblePanels();
     setupMobileNavigation();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     supabaseClient.auth.onAuthStateChange((_event, session) => {
       state.session = session;
