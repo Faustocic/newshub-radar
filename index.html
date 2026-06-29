@@ -319,11 +319,21 @@
     const HIDDEN_SIDEBAR_CATEGORIES = new Set(['Area dello Stretto']);
     const CORE_CATEGORIES = ['Tutte', 'Italia', 'Sicilia', 'Calabria', 'Area Gazzetta', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Vibo Valentia', 'Catania', 'Palermo', 'Social', 'Tecnologia', 'Finanza', 'Politica', 'Sport', 'Cultura', 'Sicurezza'];
     const STOPWORDS_IT = new Set([
-      'alla','allo','alle','agli','dalla','dallo','dalle','dagli','nella','nello','nelle','negli','sulla','sullo','sulle','sugli',
-      'con','per','tra','fra','del','dello','della','dei','degli','delle','nel','nei','che','chi','cui','come','dove','quando',
-      'sono','era','dopo','prima','oggi','ieri','domani','notizie','news','video','foto','diretta','ultime','nuovo','nuova',
-      'ancora','anche','piu','più','meno','tutti','tutte','tutto','suo','sua','suoi','sue','gli','gli','una','uno','due',
-      'tre','dal','non','ma','ha','al','il','lo','la','i','le','un','di','a','da','in','su','e','o'
+      'alla','allo','alle','agli','dalla','dallo','dalle','dagli','nella','nello','nelle','negli',
+      'sulla','sullo','sulle','sugli','con','per','tra','fra','del','dello','della','dei',
+      'degli','delle','nel','nei','che','chi','cui','come','dove','quando','sono','era',
+      'dopo','prima','oggi','ieri','domani','notizie','news','video','foto','diretta','ultime','nuovo',
+      'nuova','ancora','anche','piu','più','meno','tutti','tutte','tutto','suo','sua','suoi',
+      'sue','gli','una','uno','due','tre','dal','non','ma','ha','al','il',
+      'lo','la','i','le','un','di','a','da','in','su','e','o',
+      'dell','all','nell','dall','sull','coll','quell','bell','vall','agl','degl','anch',
+      'dov','sant','grand','gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre',
+      'ottobre','novembre','dicembre','articolo','articoli','post','gallery','leggi','guarda','vedi','ascolta','scopri',
+      'clicca','commenti','redazione','fonte','aggiornamento','aggiornato','continua','lettura','stato','stati','stata','fatto',
+      'fatti','essere','avere','oltre','primo','secondo','terzo','ultimo','ultima','grande','grandi','mentre',
+      'intanto','ecco','cosa','casa','parte','modo','caso','punto','giorno','giorni','anno','anni',
+      'volta','volte','verso','presso','contro','senza','sotto','sopra','ogni','alcuni','molti','tanto',
+      'tanti'
     ]);
 
     const state = {
