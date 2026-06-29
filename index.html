@@ -261,9 +261,10 @@
           <option value="score">Punteggio virale</option>
           <option value="oldest">Meno recenti</option>
         </select>
-        <select id="limitSelect" aria-label="Limite">
-          <option value="100">Ultime 100</option>
-          <option value="200" selected>Ultime 200</option>
+        <select id="limitSelect" aria-label="Finestra temporale">
+          <option value="4h" selected>Ultime 4 ore</option>
+          <option value="24h">Oggi (24 ore)</option>
+          <option value="all">Tutto</option>
         </select>
         <button id="favOnlyBtn" class="btn btn-ghost" type="button">Solo preferiti</button>
         <button id="reloadBtn" class="btn btn-primary" type="button">Aggiorna</button>
@@ -281,7 +282,7 @@
       </div>
 
       <div id="newsList" class="news-list"></div>
-      <div id="emptyState" class="empty hidden">Nessuna notizia trovata con i filtri attivi.</div>
+      <div id="emptyState" class="empty hidden">Nessuna notizia fresca in questa finestra. Prova ad ampliare il periodo (Oggi / Tutto) o cambia categoria.</div>
     </main>
 
     <aside class="detail">
@@ -367,6 +368,19 @@
     function timestamp(value) {
       const t = value ? new Date(value).getTime() : 0;
       return Number.isFinite(t) ? t : 0;
+    }
+
+    function currentTimeWindowLabel() {
+      const value = els.limitSelect.value || '4h';
+      if (value === '4h') return 'ultime 4 ore';
+      if (value === '24h') return 'oggi (24 ore)';
+      return 'tutto';
+    }
+
+    function timeWindowThreshold(value) {
+      if (value === '4h') return new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+      if (value === '24h') return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      return '';
     }
 
     function areasOf(article) {
@@ -459,41 +473,25 @@
       if (!state.session?.user) return;
       setLoading(true);
       try {
-        const limit = Number(els.limitSelect.value || 200);
+        const timeWindow = els.limitSelect.value || '4h';
+        const threshold = timeWindowThreshold(timeWindow);
         await loadFavorites(state.session.user.id);
 
         const articleSelect = 'id, source_name, title, url, summary, published_at, first_seen_at, fetched_at, area, category';
-        const localAreas = ['Sicilia', 'Calabria', 'Messina', 'Cosenza', 'Reggio Calabria', 'Catanzaro', 'Crotone', 'Catania', 'Palermo'];
-
-        const generalRequest = supabaseClient
+        let articlesRequest = supabaseClient
           .from('articles')
           .select(articleSelect)
           .order('published_at', { ascending: false, nullsFirst: false })
-          .limit(limit);
+          .limit(timeWindow === 'all' ? 500 : 500);
 
-        const localRequests = localAreas.map(area => supabaseClient
-          .from('articles')
-          .select(articleSelect)
-          .eq('area', area)
-          .order('published_at', { ascending: false, nullsFirst: false })
-          .limit(40));
-
-        const [generalResult, ...localResults] = await Promise.all([generalRequest, ...localRequests]);
-        if (generalResult.error) throw generalResult.error;
-        for (const result of localResults) {
-          if (result.error) throw result.error;
+        if (threshold) {
+          articlesRequest = articlesRequest.or(`published_at.gte.${threshold},and(published_at.is.null,first_seen_at.gte.${threshold})`);
         }
 
-        const articleMap = new Map();
-        for (const article of generalResult.data || []) {
-          if (article?.id) articleMap.set(article.id, article);
-        }
-        for (const result of localResults) {
-          for (const article of result.data || []) {
-            if (article?.id && !articleMap.has(article.id)) articleMap.set(article.id, article);
-          }
-        }
-        const articles = [...articleMap.values()].sort((a, b) =>
+        const { data: articleRows, error: articlesError } = await articlesRequest;
+        if (articlesError) throw articlesError;
+
+        const articles = (articleRows || []).sort((a, b) =>
           timestamp(b.published_at || b.first_seen_at || b.fetched_at) - timestamp(a.published_at || a.first_seen_at || a.fetched_at)
         );
 
@@ -715,7 +713,7 @@
       els.breakingCount.textContent = String(state.articles.filter(a => a.breaking).length);
       els.favCount.textContent = String(state.favorites.size);
       els.thresholdLabel.textContent = `${els.thresholdInput.value}+`;
-      els.resultLabel.textContent = `${displayItems.length} storie visibili · ${items.length} articoli · filtro: ${state.currentCategory}`;
+      els.resultLabel.textContent = `${displayItems.length} storie visibili · ${items.length} articoli · ${currentTimeWindowLabel()} · filtro: ${state.currentCategory}`;
       els.favOnlyBtn.classList.toggle('btn-primary', state.favOnly);
       els.favOnlyBtn.textContent = state.favOnly ? 'Tutti gli articoli' : 'Solo preferiti';
       els.emptyState.classList.toggle('hidden', displayItems.length > 0);
