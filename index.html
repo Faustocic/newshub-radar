@@ -118,6 +118,13 @@
     .export-message { min-height: 18px; color: var(--green); font-size: 12px; margin-top: 9px; }
     .print-area { display: none; }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 20; border: 1px solid rgba(110,231,183,.4); border-radius: 16px; background: rgba(16,17,15,.95); color: var(--text); padding: 12px 14px; box-shadow: 0 20px 60px rgba(0,0,0,.4); max-width: min(420px, calc(100vw - 36px)); }
+    .breaking-alert { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 90; width: min(720px, calc(100vw - 28px)); border: 1px solid rgba(255,255,255,.32); border-radius: 18px; background: linear-gradient(135deg, #b91c1c, #7f1d1d); color: white; box-shadow: 0 28px 90px rgba(0,0,0,.55); padding: 14px 46px 14px 16px; cursor: pointer; }
+    .breaking-alert strong { display: block; margin-bottom: 6px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+    .breaking-alert-title { margin: 0; font-weight: 800; line-height: 1.25; }
+    .breaking-alert-meta { margin-top: 5px; color: rgba(255,255,255,.82); font-size: 12px; }
+    .breaking-alert-list { margin: 8px 0 0; padding-left: 18px; }
+    .breaking-alert-list li { margin: 3px 0; }
+    .breaking-alert-close { position: absolute; right: 10px; top: 9px; width: 30px; height: 30px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.18); color: white; font-size: 18px; }
     .mobile-menu-btn, .sidebar-close, .sidebar-backdrop, .backtop { display: none; }
     .backtop { position: fixed; right: 18px; bottom: 18px; z-index: 30; width: 46px; height: 46px; border-radius: 999px; border: 1px solid rgba(110,231,183,.45); background: rgba(16,17,15,.92); color: var(--text); box-shadow: 0 16px 50px rgba(0,0,0,.4); font-size: 20px; }
     .backtop.show { display: block; }
@@ -292,6 +299,7 @@
   </section>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="breakingAlert" class="breaking-alert hidden" role="alert" aria-live="assertive"></div>
   <button id="backTopBtn" class="backtop" type="button" aria-label="Torna su">↑</button>
   <div id="printArea" class="print-area" aria-hidden="true"></div>
 
@@ -326,7 +334,10 @@
       loading: false,
       currentCategory: 'Tutte',
       excluded: new Set(),
-      selectedId: null
+      selectedId: null,
+      alertedBreakingClusters: new Set(),
+      breakingAlertSeeded: false,
+      currentBreakingAlertIds: []
     };
 
     const $ = (id) => document.getElementById(id);
@@ -335,7 +346,7 @@
       email: $('email'), password: $('password'), userLabel: $('userLabel'), logoutBtn: $('logoutBtn'), loadingPill: $('loadingPill'),
       searchInput: $('searchInput'), sortSelect: $('sortSelect'), limitSelect: $('limitSelect'), favOnlyBtn: $('favOnlyBtn'), reloadBtn: $('reloadBtn'),
       newsList: $('newsList'), emptyState: $('emptyState'), resultLabel: $('resultLabel'), totalCount: $('totalCount'), visibleCount: $('visibleCount'), breakingCount: $('breakingCount'),
-      favCount: $('favCount'), realtimeStatus: $('realtimeStatus'), updatedAt: $('updatedAt'), toast: $('toast'),
+      favCount: $('favCount'), realtimeStatus: $('realtimeStatus'), updatedAt: $('updatedAt'), toast: $('toast'), breakingAlert: $('breakingAlert'),
       categoryNav: $('categoryNav'), excludeChips: $('excludeChips'), hotKeywords: $('hotKeywords'), thresholdInput: $('thresholdInput'), thresholdLabel: $('thresholdLabel'),
       analysisPanel: $('analysisPanel'), exportTxt: $('exportTxt'), exportMd: $('exportMd'), copyExport: $('copyExport'), printExport: $('printExport'),
       exportMessage: $('exportMessage'), printArea: $('printArea')
@@ -447,6 +458,53 @@
       showToast.timer = window.setTimeout(() => els.toast.classList.add('hidden'), 4200);
     }
 
+    function hideBreakingAlert() {
+      if (!els.breakingAlert) return;
+      window.clearTimeout(hideBreakingAlert.timer);
+      els.breakingAlert.classList.add('hidden');
+      els.breakingAlert.innerHTML = '';
+      state.currentBreakingAlertIds = [];
+    }
+
+    function showBreakingAlert(newBreakingArticles) {
+      if (!els.breakingAlert || !newBreakingArticles.length) return;
+      const first = newBreakingArticles[0];
+      state.currentBreakingAlertIds = newBreakingArticles.map(article => article.id).filter(Boolean);
+      const label = newBreakingArticles.length === 1 ? '🔴 BREAKING' : `🔴 ${newBreakingArticles.length} nuove notizie breaking`;
+      const meta = [first.area, first.category].filter(Boolean).join(' · ');
+      const content = newBreakingArticles.length === 1
+        ? `<p class="breaking-alert-title">${escapeHtml(first.cluster?.canonical_title || first.title)}</p><div class="breaking-alert-meta">${escapeHtml(meta || 'Area non disponibile')}</div>`
+        : `<ul class="breaking-alert-list">${newBreakingArticles.slice(0, 3).map(article => `<li>${escapeHtml(article.cluster?.canonical_title || article.title)}</li>`).join('')}</ul>`;
+      els.breakingAlert.innerHTML = `
+        <button class="breaking-alert-close" type="button" aria-label="Chiudi alert breaking">×</button>
+        <strong>${escapeHtml(label)}</strong>
+        ${content}
+      `;
+      els.breakingAlert.classList.remove('hidden');
+      window.clearTimeout(hideBreakingAlert.timer);
+      hideBreakingAlert.timer = window.setTimeout(hideBreakingAlert, 10000);
+    }
+
+    function processBreakingAlerts(articles) {
+      const breakingByCluster = new Map();
+      for (const article of articles) {
+        if (!article.breaking || !article.cluster_id) continue;
+        if (!breakingByCluster.has(article.cluster_id)) breakingByCluster.set(article.cluster_id, article);
+      }
+      if (!state.breakingAlertSeeded) {
+        for (const clusterId of breakingByCluster.keys()) state.alertedBreakingClusters.add(clusterId);
+        state.breakingAlertSeeded = true;
+        return;
+      }
+      const newBreakingArticles = [];
+      for (const [clusterId, article] of breakingByCluster.entries()) {
+        if (state.alertedBreakingClusters.has(clusterId)) continue;
+        newBreakingArticles.push(article);
+        state.alertedBreakingClusters.add(clusterId);
+      }
+      if (newBreakingArticles.length) showBreakingAlert(newBreakingArticles);
+    }
+
     function showLogin(error = '') {
       els.loginView.classList.remove('hidden');
       els.appView.classList.add('hidden');
@@ -485,6 +543,10 @@
       state.session = null;
       state.articles = [];
       state.favorites.clear();
+      state.alertedBreakingClusters.clear();
+      state.breakingAlertSeeded = false;
+      state.currentBreakingAlertIds = [];
+      hideBreakingAlert();
       showLogin();
     }
 
@@ -585,6 +647,7 @@
           };
         });
 
+        processBreakingAlerts(state.articles);
         if (!state.selectedId || !state.articles.some(a => a.id === state.selectedId)) state.selectedId = state.articles[0]?.id || null;
         els.updatedAt.textContent = formatDate(new Date().toISOString());
         render();
@@ -1072,6 +1135,19 @@
     els.exportMd.addEventListener('click', () => downloadExport('md'));
     els.copyExport.addEventListener('click', copyExport);
     els.printExport.addEventListener('click', printExport);
+    els.breakingAlert.addEventListener('click', (event) => {
+      if (event.target.closest('.breaking-alert-close')) {
+        event.stopPropagation();
+        hideBreakingAlert();
+        return;
+      }
+      const firstId = state.currentBreakingAlertIds[0];
+      if (!firstId) return;
+      state.selectedId = firstId;
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      hideBreakingAlert();
+    });
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-export]');
       if (!button) return;
