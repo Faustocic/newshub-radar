@@ -341,8 +341,43 @@
       exportMessage: $('exportMessage'), printArea: $('printArea')
     };
 
+    const FILTER_STORAGE_KEYS = {
+      category: 'radar_category',
+      timeWindow: 'radar_timewindow',
+      sort: 'radar_sort'
+    };
+
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+
+    function storageGet(key) {
+      try {
+        return window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function storageSet(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch {
+        // localStorage può essere disabilitato: in quel caso si usano semplicemente i default.
+      }
+    }
+
+    function selectHasValue(select, value) {
+      return Array.from(select.options).some(option => option.value === value);
+    }
+
+    function restorePersistedFilters() {
+      const savedCategory = storageGet(FILTER_STORAGE_KEYS.category);
+      const savedTimeWindow = storageGet(FILTER_STORAGE_KEYS.timeWindow);
+      const savedSort = storageGet(FILTER_STORAGE_KEYS.sort);
+      if (savedCategory) state.currentCategory = savedCategory;
+      if (savedTimeWindow && selectHasValue(els.limitSelect, savedTimeWindow)) els.limitSelect.value = savedTimeWindow;
+      if (savedSort && selectHasValue(els.sortSelect, savedSort)) els.sortSelect.value = savedSort;
     }
 
     function formatDate(value) {
@@ -455,6 +490,7 @@
 
     async function afterLogin() {
       showApp();
+      restorePersistedFilters();
       await loadRadar();
       subscribeRealtime();
     }
@@ -989,15 +1025,22 @@
     els.loginForm.addEventListener('submit', handleLogin);
     els.logoutBtn.addEventListener('click', logout);
     els.reloadBtn.addEventListener('click', loadRadar);
-    els.limitSelect.addEventListener('change', loadRadar);
+    els.limitSelect.addEventListener('change', () => {
+      storageSet(FILTER_STORAGE_KEYS.timeWindow, els.limitSelect.value);
+      loadRadar();
+    });
     els.searchInput.addEventListener('input', render);
-    els.sortSelect.addEventListener('change', render);
+    els.sortSelect.addEventListener('change', () => {
+      storageSet(FILTER_STORAGE_KEYS.sort, els.sortSelect.value);
+      render();
+    });
     els.thresholdInput.addEventListener('input', render);
     els.favOnlyBtn.addEventListener('click', () => { state.favOnly = !state.favOnly; render(); });
     els.categoryNav.addEventListener('click', (event) => {
       const button = event.target.closest('[data-category]');
       if (!button) return;
       state.currentCategory = button.dataset.category;
+      storageSet(FILTER_STORAGE_KEYS.category, state.currentCategory);
       render();
       if (window.matchMedia('(max-width: 920px)').matches) {
         document.body.classList.remove('sidebar-open');
